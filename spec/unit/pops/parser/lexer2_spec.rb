@@ -594,21 +594,40 @@ describe 'Lexer2' do
       expect(tokens_scanned_from(code)).to match_tokens2([:STRING, "x\\u{1f452}y"])
     end
 
-    it 'produces byte offsets that counts each byte in a comment' do
-      code = <<-"CODE"
-      # \u{0400}\na
-      CODE
-      expect(tokens_scanned_from(code.strip)).to match_tokens2([:NAME, 'a', {:line => 2, :offset => 5, :length=>1}])
-    end
+    if Puppet.features.jlexer?
+      it 'produces character offsets that counts each character in a comment' do
+        code = <<-"CODE"
+        # \u{0400}\na
+        CODE
+        expect(tokens_scanned_from(code.strip)).to match_tokens2([:NAME, 'a', {:line => 2, :offset => 4, :length=>1}])
+      end
 
-    it 'produces byte offsets that counts each byte in value token' do
-      code = <<-"CODE"
-      '\u{0400}'\na
-      CODE
-      expect(tokens_scanned_from(code.strip)).to match_tokens2(
-        [:STRING, "\u{400}", {:line => 1, :offset => 0, :length=>4}],
-        [:NAME, 'a', {:line => 2, :offset => 5, :length=>1}]
-      )
+      it 'produces character offsets that counts each character in value token' do
+        code = <<-"CODE"
+        '\u{0400}'\na
+        CODE
+        expect(tokens_scanned_from(code.strip)).to match_tokens2(
+          [:STRING, "\u{400}", {:line => 1, :offset => 0, :length=>3}],
+          [:NAME, 'a', {:line => 2, :offset => 4, :length=>1}]
+        )
+      end
+    else
+      it 'produces byte offsets that counts each byte in a comment' do
+        code = <<-"CODE"
+        # \u{0400}\na
+        CODE
+        expect(tokens_scanned_from(code.strip)).to match_tokens2([:NAME, 'a', {:line => 2, :offset => 5, :length=>1}])
+      end
+
+      it 'produces byte offsets that counts each byte in value token' do
+        code = <<-"CODE"
+        '\u{0400}'\na
+        CODE
+        expect(tokens_scanned_from(code.strip)).to match_tokens2(
+          [:STRING, "\u{400}", {:line => 1, :offset => 0, :length=>4}],
+          [:NAME, 'a', {:line => 2, :offset => 5, :length=>1}]
+        )
+      end
     end
 
     it 'should not select LISTSTART token when preceded by multibyte chars' do
