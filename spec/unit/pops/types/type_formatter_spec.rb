@@ -38,9 +38,13 @@ describe 'The type formatter' do
       expect(s.indented_string({'a' => 32,'b' => [1, 2, {'c' => 'd'}]})).to eq(<<-FORMATTED)
 {
   'a' => 32,
-  'b' => [1, 2, {
-    'c' => 'd'
-  }]
+  'b' => [
+    1,
+    2,
+    {
+      'c' => 'd'
+    }
+  ]
 }
 FORMATTED
     end
@@ -49,9 +53,13 @@ FORMATTED
       expect(s.indented_string({'a' => 32,'b' => [1, 2, {'c' => 'd'}]}, 3)).to eq(<<-FORMATTED)
       {
         'a' => 32,
-        'b' => [1, 2, {
-          'c' => 'd'
-        }]
+        'b' => [
+          1,
+          2,
+          {
+            'c' => 'd'
+          }
+        ]
       }
 FORMATTED
     end
@@ -60,9 +68,13 @@ FORMATTED
       expect(s.indented_string({'a' => 32,'b' => [1, 2, {'c' => 'd'}]}, 2, 4)).to eq(<<-FORMATTED)
         {
             'a' => 32,
-            'b' => [1, 2, {
-                'c' => 'd'
-            }]
+            'b' => [
+                1,
+                2,
+                {
+                    'c' => 'd'
+                }
+            ]
         }
     FORMATTED
   end
