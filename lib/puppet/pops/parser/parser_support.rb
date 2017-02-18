@@ -82,7 +82,7 @@ class Parser
   end
 
   def initialize()
-    @lexer = Lexer2.new
+    @lexer = Lexer3.new
     @namestack = []
     @definitions = []
   end
@@ -219,7 +219,7 @@ class Parser
     # Create a synthetic NOOP token at EOF offset with 0 size. The lexer does not produce an EOF token that is
     # visible to the grammar rules. Creating this token is mainly to reuse the positioning logic as it
     # expects a token decorated with location information.
-    token_sym, token = @lexer.emit_completed([:NOOP,'',0], locator.string.bytesize)
+    token_sym, token = @lexer.emit([:NOOP,'',0], 0)
     loc(no_op, token)
     # Program with a Noop
     program = Factory.PROGRAM(no_op, [], locator)

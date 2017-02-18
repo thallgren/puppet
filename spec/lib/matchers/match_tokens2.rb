@@ -13,10 +13,10 @@ RSpec::Matchers.define :match_tokens2 do | *expected |
   end
 
   def failure_message
-    msg = ["Expected (#{expected.size}):"]
-    expected.each {|e| msg << e.to_s }
+    msg = ["Expected (#{expected_as_array.size}):"]
+    expected_as_array.each {|e| msg << e.to_s }
 
-    zipped = expected.zip(actual)
+    zipped = expected_as_array.zip(actual)
     msg << "\nGot (#{actual.size}):"
     actual.each_with_index do |e, idx|
       if zipped[idx]

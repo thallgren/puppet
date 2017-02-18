@@ -101,6 +101,7 @@ class IssueReporter
       line = diagnostic.source_pos.line
       pos = diagnostic.source_pos.pos
     end
+    puts formatter.format_message(diagnostic)
     Puppet::Util::Log.create({
         :level => severity,
         :message => formatter.format_message(diagnostic),

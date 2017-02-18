@@ -81,10 +81,16 @@ $a = "interpolate ${foo} and stuff"
     puts "Pcore Json: #{m}"
   end
 
-  it "lexer2", :profile => true do
-    lexer = Puppet::Pops::Parser::Lexer2.new
+  it "lexer3", :profile => true do
+    lexer = Puppet::Pops::Parser::Lexer3.new
      m = Benchmark.measure {10000.times {lexer.string = code; lexer.fullscan }}
      puts "Lexer2: #{m}"
+  end
+
+  it "lexer2", :profile => true do
+    lexer = Puppet::Pops::Parser::Lexer2.new
+    m = Benchmark.measure {10000.times {lexer.string = code; lexer.fullscan }}
+    puts "Lexer2: #{m}"
   end
 
   it "lexer1", :profile => true do

@@ -10,8 +10,8 @@ class Benchmarker
     @target = target
     @size = size
     @micro_benchmarks = {}
-    @parsecount = 100
-    @evalcount = 100
+    @parsecount = size / 10
+    @evalcount = size / 10
   end
 
   def setup

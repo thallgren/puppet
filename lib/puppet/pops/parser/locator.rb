@@ -72,7 +72,8 @@ class Locator
   # Returns the line index - an array of line offsets for the start position of each line, starting at 0 for
   # the first line.
   #
-  def line_index()
+  def line_index
+    @line_index ||= compute_line_index
   end
 
   # Produces an URI with path?line=n&pos=n. If origin is unknown the URI is string:?line=n&pos=n
@@ -162,7 +163,8 @@ class Locator
   private
 
   class AbstractLocator < Locator
-    attr_accessor :line_index
+    include Types::PuppetObject
+
     attr_accessor :string
     attr_accessor :prev_offset
     attr_accessor :prev_line
@@ -177,8 +179,6 @@ class Locator
       @file = file.freeze
       @prev_offset = nil
       @prev_line = nil
-      @line_index = line_index
-      compute_line_index if line_index.nil?
     end
 
     # Returns the position on line (first position on a line is 1)
@@ -243,16 +243,6 @@ class Locator
       self.class == o.class && string == o.string && file == o.file && line_index == o.line_index
     end
 
-    # Common impl for 18 and 19 since scanner is byte based
-    def compute_line_index
-      scanner = StringScanner.new(string)
-      result = [0] # first line starts at 0
-      while scanner.scan_until(/\n/)
-        result << scanner.pos
-      end
-      self.line_index = result.freeze
-    end
-
     # Returns the line number (first line is 1) for the given offset
     def line_for_offset(offset)
       if prev_offset == offset
@@ -273,6 +263,33 @@ class Locator
   end
 
   class LocatorForChars < AbstractLocator
+    def self._plocation
+      loc = Puppet::Util.path_to_uri("#{__FILE__}")
+      URI("#{loc}?line=#{__LINE__.to_i - 3}")
+    end
+
+    def self._ptype
+      @type ||= Types::PObjectType.new('Puppet::AST::Locator', {
+        'attributes' => {
+          'string' => Types::PStringType::DEFAULT,
+          'file' => Types::PStringType::DEFAULT,
+          'line_index' => {
+            Types::KEY_TYPE => Types::POptionalType.new(Types::PArrayType.new(Types::PIntegerType::DEFAULT)),
+            Types::KEY_VALUE => nil
+          }
+        }
+      })
+    end
+
+    def compute_line_index
+      pos = 0
+      result = [0]
+      string.each_codepoint do |c|
+        pos += 1
+        result << pos if c == 0x0a
+      end
+      result.freeze
+    end
 
     def offset_on_line(offset)
       line_offset = line_index[ line_for_offset(offset)-1 ]
@@ -305,10 +322,8 @@ class Locator
       URI("#{loc}?line=#{__LINE__.to_i - 3}")
     end
 
-    include Types::PuppetObject
-
     def self._pcore_type
-      @type ||= Types::PObjectType.new('Puppet::AST::Locator', {
+      @type ||= Types::PObjectType.new('Puppet::AST::LocatorForBytes', {
         'attributes' => {
           'string' => Types::PStringType::DEFAULT,
           'file' => Types::PStringType::DEFAULT,
