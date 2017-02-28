@@ -172,43 +172,41 @@ class Lexer3
   KEYWORDS.each_pair {|k, v| KEYWORD_NAMES[v[0]] = k }
   KEYWORD_NAMES.freeze
 
-  UPPERCASE = []
-  LOWERCASE = []
-  OCTAL_DIGIT = []
   HEX_DIGIT = []
-  DIGIT = []
   LETTER = []
   LETTER_OR_DIGIT = []
   WORD = []
-  WHITESPACE = []
+  WHITESPACE = [0x09, 0x0a, 0x0c, 0x20].freeze
 
-  CHAR_CLASSES = []
-  [0x09, 0x0a, 0x0d, 0x20].each { |n| WHITESPACE[n] = true }
-  (0x30..0x37).each { |n| WORD[n] = true; LETTER_OR_DIGIT[n] = true; HEX_DIGIT[n] = true; DIGIT[n] = true; OCTAL_DIGIT[n] = true }
-  (0x38..0x39).each { |n| WORD[n] = true; LETTER_OR_DIGIT[n] = true; HEX_DIGIT[n] = true; DIGIT[n] = true }
-  (0x41..0x46).each { |n| WORD[n] = true; LETTER_OR_DIGIT[n] = true; LETTER[n] = true; UPPERCASE[n] = true; HEX_DIGIT[n] = true }
-  (0x47..0x5a).each { |n| WORD[n] = true; LETTER_OR_DIGIT[n] = true; LETTER[n] = true; UPPERCASE[n] = true }
-  (0x61..0x66).each { |n| WORD[n] = true; LETTER_OR_DIGIT[n] = true; LETTER[n] = true; LOWERCASE[n] = true; HEX_DIGIT[n] = true }
-  (0x67..0x7a).each { |n| WORD[n] = true; LETTER_OR_DIGIT[n] = true; LETTER[n] = true; LOWERCASE[n] = true }
+  (0x30..0x39).each { |n| WORD[n] = true; LETTER_OR_DIGIT[n] = true; HEX_DIGIT[n] = true }
+  (0x41..0x46).each { |n| WORD[n] = true; LETTER_OR_DIGIT[n] = true; LETTER[n] = true; HEX_DIGIT[n] = true }
+  (0x47..0x5a).each { |n| WORD[n] = true; LETTER_OR_DIGIT[n] = true; LETTER[n] = true }
+  (0x61..0x66).each { |n| WORD[n] = true; LETTER_OR_DIGIT[n] = true; LETTER[n] = true; HEX_DIGIT[n] = true }
+  (0x67..0x7a).each { |n| WORD[n] = true; LETTER_OR_DIGIT[n] = true; LETTER[n] = true }
   WORD[0x5f] = true
+
+  HEX_DIGIT.freeze
+  LETTER.freeze
+  LETTER_OR_DIGIT.freeze
+  WORD.freeze
 
   # Invalid codepoint, used to denote end of stream. Saves checks for nil (nil does not respond to '<' '>')
   EOF = 0xffffffff
 
   def octal_digit?(c)
-    OCTAL_DIGIT[c]
+    c >= 0x30 && c <= 0x37
+  end
+
+  def upper_case_letter?(c)
+    c >= 0x41 && c <= 0x5a
+  end
+
+  def lower_case_letter?(c)
+    c >= 0x61 && c <= 0x7a
   end
 
   def letter?(c)
     LETTER[c]
-  end
-
-  def lower_case_letter?(c)
-    LOWERCASE[c]
-  end
-
-  def upper_case_letter?(c)
-    UPPERCASE[c]
   end
 
   def letter_or_digit?(c)
@@ -216,7 +214,7 @@ class Lexer3
   end
 
   def digit?(c)
-    DIGIT[c]
+    c >= 0x30 && c <= 0x39
   end
 
   def hex_digit?(c)
@@ -224,7 +222,7 @@ class Lexer3
   end
 
   def whitespace?(c)
-    WHITESPACE[c]
+    WHITESPACE.include?(c)
   end
 
   def word_char?(c)
@@ -270,8 +268,8 @@ class Lexer3
 
     # TOKEN '%', '%>'
     @selector[0x25] = proc do |i|
-      if @codepoints[i + 1] == 0x3e
-        @pos += 1
+      if @codepoints[@next] == 0x3e
+        @next += 1
         emit(TOKEN_EPPEND, i)
       else
         emit(TOKEN_MODULO, i)
@@ -293,12 +291,12 @@ class Lexer3
 
     # TOKENS '@', '@@', '@('
     @selector[0x40] = proc do |i|
-      c = @codepoints[i + 1]
+      c = @codepoints[@next]
       if c == 0x40
-        @pos += 1
+        @next += 1
         emit(TOKEN_ATAT, i)
       elsif c == 0x28
-        @pos += 1
+        @next += 1
         emit(TOKEN_ATLP, i)
       else
         emit(TOKEN_AT, i)
@@ -307,12 +305,11 @@ class Lexer3
 
     # TOKENS '|', '|>', '|>>'
     @selector[0x7c] = proc do |i|
-      c = @codepoints[i + 1]
+      c = @codepoints[@next]
       if c == 0x3e
-        @pos += 1
-        c = @codepoints[@pos + 1]
+        c = @codepoints[@next += 1]
         if c == 0x3e
-          @pos += 1
+          @next += 1
           emit(TOKEN_RRCOLLECT, i)
         else
           emit(TOKEN_RCOLLECT, i)
@@ -324,15 +321,15 @@ class Lexer3
 
     # TOKENS '=', '=>', '==', '=~'
     @selector[0x3d] = proc do |i|
-      c = @codepoints[i + 1]
+      c = @codepoints[@next]
       if c == 0x3e
-        @pos += 1
+        @next += 1
         emit(TOKEN_FARROW, i)
       elsif c == 0x3d
-        @pos += 1
+        @next += 1
         emit(TOKEN_ISEQUAL, i)
       elsif c == 0x7e
-        @pos += 1
+        @next += 1
         emit(TOKEN_MATCH, i)
       else
         emit(TOKEN_EQUALS, i)
@@ -341,12 +338,12 @@ class Lexer3
 
     # TOKENS '+', '+=', and '+>'
     @selector[0x2b] = proc do |i|
-      c = @codepoints[i + 1]
+      c = @codepoints[@next]
       if c == 0x3d
-        @pos += 1
+        @next += 1
         emit(TOKEN_APPENDS, i)
       elsif c == 0x3e
-        @pos += 1
+        @next += 1
         emit(TOKEN_PARROW, i)
       else
         emit(TOKEN_PLUS, i)
@@ -355,16 +352,16 @@ class Lexer3
 
     # TOKENS '-', '->', '-=', and epp '-%>' (end of interpolation with trim)
     @selector[0x2d] = proc do |i|
-      c = @codepoints[i + 1]
+      c = @codepoints[@next]
       if c == 0x3e # '>'
-        @pos += 1
+        @next += 1
         emit(TOKEN_IN_EDGE, i)
       elsif c == 0x3d # '='
-        @pos += 1
+        @next += 1
         emit(TOKEN_DELETES, i)
       elsif c == 0x25 # '%'
-        if @codepoints[@pos + 2] == 0x3e # '>'
-          @pos += 2
+        if @codepoints[@next + 1] == 0x3e # '>'
+          @next += 2
           emit(TOKEN_EPPEND_TRIM, i)
         else
           emit(TOKEN_MINUS, i)
@@ -376,12 +373,12 @@ class Lexer3
 
     # TOKENS '!', '!=', '!~'
     @selector[0x21] = proc do |i|
-      c = @codepoints[i + 1]
+      c = @codepoints[@next]
       if c == 0x3d
-        @pos += 1
+        @next += 1
         emit(TOKEN_NOTEQUAL, i)
       elsif c == 0x7e
-        @pos += 1
+        @next += 1
         emit(TOKEN_NOMATCH, i)
       else
         emit(TOKEN_NOT, i)
@@ -390,9 +387,9 @@ class Lexer3
 
     # TOKENS '~>', '~'
     @selector[0x7e] = proc do |i|
-      c = @codepoints[i + 1]
+      c = @codepoints[@next]
       if c == 0x3e
-        @pos += 1
+        @next += 1
         emit(TOKEN_IN_EDGE_SUB, i)
       else
         emit(TOKEN_TILDE, i)
@@ -402,10 +399,9 @@ class Lexer3
     # TOKEN '#'
     @selector[0x23] = proc do |i|
       loop do
-        i += 1
-        c = @codepoints[i]
+        c = @codepoints[i += 1]
         if c == 0x0a || c.nil?
-          @pos = i
+          @next = i + 1
           break
         end
       end
@@ -414,18 +410,18 @@ class Lexer3
 
     # TOKENS '/', '/*'
     @selector[0x2f] = proc do |i|
-      c = @codepoints[i + 1]
+      c = @codepoints[@next]
       if c == 0x2a
-        @pos += 1
         # scan for comment end
-        c = @codepoints[@pos += 1]
+        c = @codepoints[@next += 1]
         ok = loop do
-          c2 = @codepoints[@pos += 1]
+          c2 = @codepoints[@next += 1]
           break false if c2.nil?
           break true if c == 0x2a && c2 == 0x2f
           c = c2
         end
         lex_error(Issues::UNCLOSED_MLCOMMENT, EMPTY_HASH, i) unless ok
+        @next += 1
         nil
       elsif regexp_acceptable?
         emit_regexp(i)
@@ -436,25 +432,24 @@ class Lexer3
 
     # TOKENS '<', '<=', '<|', '<-', '<~', '<<|', '<<'
     @selector[0x3c] = proc do |i|
-      c = @codepoints[i + 1]
+      c = @codepoints[@next]
       if c == 0x3d # '='
-        @pos += 1
+        @next += 1
         emit(TOKEN_LESSEQUAL, i)
       elsif c == 0x7c # '|'
-        @pos += 1
+        @next += 1
         emit(TOKEN_LCOLLECT, i)
       elsif c == 0x2d # '-'
-        @pos += 1
+        @next += 1
         emit(TOKEN_OUT_EDGE, i)
       elsif c == 0x7e # '~'
-        @pos += 1
+        @next += 1
         emit(TOKEN_OUT_EDGE_SUB, i)
       elsif c == 0x3c # '<'
-        @pos += 2
-        if @codepoints[@pos] == 0x7c # '|'
+        if @codepoints[@next + 1] == 0x7c # '|'
+          @next += 2
           emit(TOKEN_LLCOLLECT, i)
         else
-          @pos -= 1
           emit(TOKEN_LSHIFT, i)
         end
       else
@@ -464,12 +459,12 @@ class Lexer3
 
     # TOKENS '>', '>=', '>>'
     @selector[0x3e] = proc do |i|
-      c = @codepoints[i + 1]
+      c = @codepoints[@next]
       if c == 0x3d # '='
-        @pos += 1
+        @next += 1
         emit(TOKEN_GREATEREQUAL, i)
       elsif c == 0x3e # '>'
-        @pos += 1
+        @next += 1
         emit(TOKEN_RSHIFT, i)
       else
         emit(TOKEN_GREATERTHAN, i)
@@ -478,10 +473,9 @@ class Lexer3
 
     # TOKENS ':', '::CLASSREF', '::NAME'
     @selector[0x3a] = proc do |i|
-      c = @codepoints[i + 1]
+      c = @codepoints[@next]
       if c == 0x3a
-        @pos += 1
-        c = @codepoints[@pos + 1] || EOF
+        c = @codepoints[@next += 1] || EOF
         if upper_case_letter?(c)
           emit_classref('::', i)
         elsif lower_case_letter?(c)
@@ -497,12 +491,10 @@ class Lexer3
     # TOKENS '$', '$VAR'
     #   PATTERN_DOLLAR_VAR     = %r{\$(::)?(\w+::)*\w+}.freeze
     @selector[0x24] = proc do |i|
-      c = @codepoints[i + 1]
+      c = @codepoints[@next]
       if c == 0x3a
-        @pos += 1
-        lex_error(Issues::ILLEGAL_VARIABLE, i, :value => '$:') unless  @codepoints[@pos + 1] == 0x3a
-        @pos += 1
-        lex_error(Issues::ILLEGAL_VARIABLE, i, :value => '$::') unless word_char?(@codepoints[@pos + 1] || EOF)
+        lex_error(Issues::ILLEGAL_VARIABLE, i, :value => '$:') unless  @codepoints[@next += 1] == 0x3a
+        lex_error(Issues::ILLEGAL_VARIABLE, i, :value => '$::') unless word_char?(@codepoints[@next += 1] || EOF)
         emit_variable('::', i)
       elsif word_char?(c || EOF)
         emit_variable('', i)
@@ -523,13 +515,9 @@ class Lexer3
     # TOKEN WS (Space, Horizontal Tab, Carriage Return)
     skip_ws = proc do |i|
       loop do
-        i += 1
-        unless whitespace?(@codepoints[i] || EOF)
-          @pos = i - 1
-          break
-        end
+        break nil unless whitespace?(@codepoints[@next] || EOF)
+        @next += 1
       end
-      nil
     end
 
     @selector[0x09] = skip_ws
@@ -538,19 +526,17 @@ class Lexer3
 
     # TOKEN '0'
     @selector[0x30] = proc do |i|
-      c = @codepoints[@pos + 1] || EOF
+      c = @codepoints[@next] || EOF
       if c == 0x58 || c == 0x78 # 'X' or 'x'
-        c = @codepoints[@pos += 1] # get the 'X' or 'x'
-        c2 = @codepoints[@pos += 1] || EOF
+        c2 = @codepoints[@next += 1] || EOF
         str = '0'
         str << c
         str << c2
         lex_error(Issues::INVALID_HEX_NUMBER, {:value => str}, i) unless hex_digit?(c2)
         loop do
-          c = @codepoints[@pos += 1] || EOF
+          c = @codepoints[@next += 1] || EOF
           unless hex_digit?(c)
-            lex_error(Issues::INVALID_HEX_NUMBER, {:value => str}, i) if letter?(c)
-            @pos -= 1
+            lex_error(Issues::INVALID_HEX_NUMBER, {:value => str}, i) if word_char?(c)
             break
           end
           str << c
@@ -558,21 +544,18 @@ class Lexer3
         emit([:NUMBER, str, str.size], i)
       elsif c && octal_digit?(c)
         # Octal number
-        @pos += 1
         str = '0'
         str << c
         loop do
-          c = @codepoints[@pos += 1] || EOF
+          c = @codepoints[@next += 1] || EOF
           unless octal_digit?(c)
             lex_error(Issues::INVALID_OCTAL_NUMBER, {:value => str}, i) if letter_or_digit?(c)
-            @pos -= 1
             break
           end
           str << c
         end
         emit([:NUMBER, str, str.size], i)
       elsif c == 0x2e || c == 0x45 || c == 0x65 # dot, 'E', or 'e'
-        @pos += 1
         str = parseFloat('0', c, i)
         emit([:NUMBER, str, str.size], i)
       else
@@ -585,16 +568,16 @@ class Lexer3
       @selector[n] = proc do |i, c|
         str = c.chr
         loop do
-          c = @codepoints[@pos += 1] || EOF
+          c = @codepoints[@next] || EOF
           unless digit?(c)
             if c == 0x2e || c == 0x45 || c == 0x65 # dot, 'E', or 'e'
               str = parseFloat(str, c, i)
             else
               lex_error(Issues::ILLEGAL_NUMBER, {:value => str}, i) if letter?(c)
-              @pos -= 1
             end
             break
           end
+          @next += 1
           str << c
         end
         emit([:NUMBER, str, str.size], i)
@@ -616,26 +599,26 @@ class Lexer3
   # PATTERN_CLASSREF       = %r{((::){0,1}[A-Z][\w]*)+}.freeze
   def emit_classref(str, i)
     loop do
-      c = @codepoints[@pos += 1] || EOF
+      c = @codepoints[@next] || EOF
       unless letter_or_digit?(c)
         if c != 0x3a # ':'
-          @pos -= 1
           break
         end
 
-        if @codepoints[@pos + 1] != 0x3a # '::'
+        if @codepoints[@next += 1] != 0x3a # '::'
           # only one colon is OK as next token
-          @pos -= 1
+          @next -= 1
           break
         end
 
-        @pos += 1
         # Must be followed by an upper case letter
-        unless upper_case_letter?(@codepoints[@pos + 1] || EOF)
+        c = @codepoints[@next += 1]
+        unless upper_case_letter?(c || EOF)
           lex_error(str.start_with?('::') ? Issues::ILLEGAL_FULLY_QUALIFIED_CLASS_REFERENCE : Issues::ILLEGAL_CLASS_REFERENCE, EMPTY_HASH, i)
         end
-        str << c
+        str << '::'
       end
+      @next += 1
       str << c
     end
     str.freeze
@@ -645,25 +628,25 @@ class Lexer3
   # PATTERN_DOLLAR_VAR     = %r{\$(::)?(\w+::)*\w+}.freeze
   def emit_variable(str, i)
     loop do
-      c = @codepoints[@pos += 1]
+      c = @codepoints[@next]
       break if c.nil?
       unless word_char?(c)
         unless c == 0x3a # ':'
-          @pos -= 1
           break
         end
 
-        unless @codepoints[@pos + 1] == 0x3a # '::'
+        unless @codepoints[@next += 1] == 0x3a # '::'
           # only one colon is OK as next token
-          @pos -= 1
+          @next -= 1
           break
         end
 
-        @pos += 1
         # Must be followed by a word character
-        lex_error(Issues::ILLEGAL_VARIABLE_NAME, EMPTY_HASH, i) unless word_char?(@codepoints[@pos + 1] || EOF)
-        str << c
+        c = @codepoints[@next += 1]
+        lex_error(Issues::ILLEGAL_VARIABLE_NAME, EMPTY_HASH, i) unless word_char?(c || EOF)
+        str << '::'
       end
+      @next += 1
       str << c
     end
     str.freeze
@@ -672,47 +655,43 @@ class Lexer3
 
   def emit_sqstring(i)
     str = ''
-    len = 1
     loop do
-      c = @codepoints[@pos += 1]
+      c = @codepoints[@next]
       lex_error(Issues::UNCLOSED_QUOTE, { :after => '"\'"', :followed_by => '<eof>' }, i) if c.nil?
-      len += 1
+      @next += 1
       break if c == 0x27
       if c == 0x5c # '\'
-        c = @codepoints[@pos += 1]
+        c = @codepoints[@next]
         lex_error(Issues::UNCLOSED_QUOTE, { :after => '"\'"', :followed_by => '<eof>' }, i) if c.nil?
-        len += 1
+        @next += 1
         str << '\\' unless c == 0x27 || c == 0x5c
-        str << c
-      else
-        str << c
       end
+      str << c
     end
-    emit([:STRING, str.freeze, len], i)
+    emit([:STRING, str.freeze, @next - i], i)
   end
 
   #   PATTERN_REGEX     = %r{/[^/\n]*/}
   def emit_regexp(i)
     str = ''
     result = loop do
-      c = @codepoints[@pos += 1]
+      c = @codepoints[@next]
       break false if c.nil?
-      if c == 0x5c && @codepoints[@pos + 1] == 0x5c # '\\'
-        @pos += 1
-        c = @codepoints[@pos += 1]
+      @next += 1
+      if c == 0x5c && @codepoints[@next] == 0x5c # '\\'
+        c = @codepoints[@next += 1]
         break false if c.nil? || c == 0x0a
         str << '\\\\' unless c == 0x2f
       else
-        break true if c == 0x2f # '/'
         break false if c == 0x0a
+        break true if c == 0x2f # '/'
       end
       str << c
     end
     if result
-      emit([:REGEX, Regexp.new(str), @pos - i], i)
+      emit([:REGEX, Regexp.new(str), (@next - 1) - i], i)
     else
-      # Push everything back
-      @pos = i
+      @next = i + 1
       emit(TOKEN_DIV, i)
     end
   end
@@ -733,22 +712,23 @@ class Lexer3
       len = 1
     else
       len = 0
-      i += 1
     end
     loop do
-      c = @codepoints[@pos += 1]
+      c = @codepoints[@next]
       lex_error(Issues::UNCLOSED_QUOTE, { :after => "'\"'", :followed_by => '<eof>' }, i) unless c
 
       len += 1
+      @next += 1
       if c == 0x22
         @token_queue << emit([first ? :STRING : :DQPOST, str.freeze, len], i)
         break
       end
       if c == 0x5c # '\'
-        c = @codepoints[@pos += 1]
+        c = @codepoints[@next]
         lex_error(Issues::UNCLOSED_QUOTE, { :after => "'\"'", :followed_by => '<eof>' }, i) unless c
 
         len += 1
+        @next += 1
         case c
         when 0x5c, 0x24, 0x27 # '\\', '$', '"'
           str << c
@@ -761,13 +741,13 @@ class Lexer3
         when 0x74 # 't'
           str << "\t"
         when 0x75 # 'u', unicode escape
-          c = @codepoints[@pos += 1] || EOF
+          c = @codepoints[@next] || EOF
           len += 1
           if c == 0x7b # '{'
             # 1-6 hex-digits
             code = 0
             loop do
-              c = @codepoints[@pos += 1] || EOF
+              c = @codepoints[@next += 1] || EOF
               len += 1
               break if c == 0x7d # '}'
               lex_error(Issues::ILLEGAL_UNICODE_ESCAPE, i) unless hex_digit?(c)
@@ -777,38 +757,37 @@ class Lexer3
             str << [code].pack('U')
           elsif hex_digit?(c)
             # exactly 4 hex dgits
-            c2 = @codepoints[@pos += 1] || EOF
-            c3 = @codepoints[@pos += 1] || EOF
-            c4 = @codepoints[@pos += 1] || EOF
+            c2 = @codepoints[@next += 1] || EOF
+            c3 = @codepoints[@next += 1] || EOF
+            c4 = @codepoints[@next += 1] || EOF
             len += 3
             lex_error(Issues::ILLEGAL_UNICODE_ESCAPE, i) unless hex_digit?(c2) && hex_digit?(c3) && hex_digit?(c4)
             str.concat(((hex_to_int(c) * 0x10 + hex_to_int(c2)) * 0x10 + hex_to_int(c3)) * 0x10 + hex_to_int(c4))
           else
             lex_error(Issues::ILLEGAL_UNICODE_ESCAPE, i)
           end
+          @next += 1
         else
           str << c
         end
       elsif c == 0x24 # '$'
-        var_start = @pos
-        n = @codepoints[@pos + 1] || EOF
+        var_start = @next - 1
+        n = @codepoints[@next] || EOF
         if n == 0x3a # ':'
-          @pos += 1
-          lex_error(Issues::ILLEGAL_VARIABLE, i, :value => '$:') unless  @codepoints[@pos + 1] == 0x3a
-          @pos += 1
-          lex_error(Issues::ILLEGAL_VARIABLE, i, :value => '$::') unless word_char?(@codepoints[@pos + 1] || EOF)
+          lex_error(Issues::ILLEGAL_VARIABLE, i, :value => '$:') unless  @codepoints[@next += 1] == 0x3a
+          lex_error(Issues::ILLEGAL_VARIABLE, i, :value => '$::') unless word_char?(@codepoints[@next += 1] || EOF)
           @token_queue << emit([first ? :DQPRE : :DQMID, str, len - 1], i)
           @token_queue << emit_variable('::', var_start)
-          emit_dqstring(@pos, false)
+          emit_dqstring(@next, false)
           break
         elsif word_char?(n)
           @token_queue << emit([first ? :DQPRE : :DQMID, str, len - 1], i)
           @token_queue << emit_variable('', var_start)
-          emit_dqstring(@pos, false)
+          emit_dqstring(@next, false)
           break
         elsif n == 0x7b # '{'
           # Nested expression, queue tokens until brace count is back to current
-          @pos += 1
+          @next += 1
           current_brace_count = @brace_count
           @brace_count += 1
 
@@ -820,15 +799,17 @@ class Lexer3
             if token
               new_queue << token
             else
-              c = @codepoints[@pos += 1] || EOF
+              pos = @next
+              @next += 1
+              c = @codepoints[pos] || EOF
               if c < 0x80
-                token = selector[c].call(@pos, c)
+                token = selector[c].call(pos, c)
                 break if @brace_count == current_brace_count
                 new_queue << token unless token.nil?
               elsif c == EOF
                 break
               else
-                new_queue << emit([:OTHER,  [c].pack('U'),  1], @pos)
+                new_queue << emit([:OTHER,  [c].pack('U'),  1], pos)
               end
             end
           end
@@ -842,7 +823,7 @@ class Lexer3
 
           queue << emit([first ? :DQPRE : :DQMID, str, len + 1], i)
           queue.concat(new_queue)
-          emit_dqstring(@pos, false)
+          emit_dqstring(@next, false)
           break
         else
           str << c
@@ -858,18 +839,17 @@ class Lexer3
   # PATTERN_BARE_WORD     = %r{((?:::){0,1}(?:[a-z_](?:[\w-]*[\w])?))+}
   def emit_name(str, i, name)
     loop do
-      c = @codepoints[@pos += 1] || EOF
+      c = @codepoints[@next] || EOF
       unless word_char?(c)
         if c == 0x2d # '-'
           cnt = 1
           loop do
-            c = @codepoints[@pos += 1] || EOF
+            c = @codepoints[@next += 1] || EOF
             break unless c == 0x2d
             cnt += 1
           end
 
           unless word_char?(c)
-            @pos -= 1
             cnt.times { @token_queue << TOKEN_MINUS }
             break
           end
@@ -877,27 +857,26 @@ class Lexer3
           name = false
         else
           if c != 0x3a # ':'
-            @pos -= 1
             break
           end
 
-          if @codepoints[@pos + 1] != 0x3a # '::'
+          if @codepoints[@next += 1] != 0x3a # '::'
             # only one colon is OK as next token
-            @pos -= 1
+            @next -= 1
             break
           end
 
-          @pos += 1
           # Must be followed by a lower case letter
-          n = @codepoints[@pos + 1] || EOF
-          if n == 0x5f
+          c = @codepoints[@next += 1] || EOF
+          if c == 0x5f
             name = false
           else
-            lex_error(Issues::ILLEGAL_FULLY_QUALIFIED_NAME, EMPTY_HASH, i) unless lower_case_letter?(n)
+            lex_error(Issues::ILLEGAL_FULLY_QUALIFIED_NAME, EMPTY_HASH, i) unless lower_case_letter?(c)
           end
-          str << c
+          str << '::'
         end
       end
+      @next += 1
       str << c
     end
     str.freeze
@@ -910,23 +889,21 @@ class Lexer3
   # @param floatchar [Integer] codepoint of the '.', 'e', or 'E'
   # @return [String] the parsed float
   def parseFloat(str, floatchar, i)
-    c = @codepoints[@pos + 1] || EOF
+    c = @codepoints[@next += 1] || EOF
     if floatchar == 0x2e && !digit?(c)
-      @pos -= 1
       return str
     end
 
-    @pos += 1
     str << floatchar
     if c == 0x2d && (floatchar == 0x45 || floatchar == 0x65) # 'e-' or 'E-'
       str << c
-      c = @codepoints[@pos += 1] || EOF
+      c = @codepoints[@next += 1] || EOF
     end
 
     lex_error(Issues::INVALID_DECIMAL_NUMBER, {:value => str}, i) unless digit?(c)
     loop do
       str << c
-      c = @codepoints[@pos += 1] || EOF
+      c = @codepoints[@next += 1] || EOF
       break unless c && digit?(c)
     end
 
@@ -935,7 +912,6 @@ class Lexer3
       str = parseFloat(str, c, i)
     else
       lex_error(Issues::INVALID_DECIMAL_NUMBER, {:value => str}, i) if c && letter?(c)
-      @pos -= 1
     end
     str
   end
@@ -1017,7 +993,7 @@ class Lexer3
 
   def initvars
     @brace_count = 0
-    @pos = -1
+    @next = 0
     @token_queue = []
   end
 
@@ -1047,13 +1023,15 @@ class Lexer3
       if token
         yield(token)
       else
-        c = @codepoints[@pos += 1]
+        pos = @next
+        @next += 1
+        c = @codepoints[pos]
         break if c.nil?
         if c < 0x80
-          token = selector[c].call(@pos, c)
+          token = selector[c].call(pos, c)
           yield(token) unless token.nil?
         else
-          yield(emit([:OTHER,  [c].pack('U'),  1], @pos))
+          yield(emit([:OTHER,  [c].pack('U'),  1], pos))
         end
       end
     end
