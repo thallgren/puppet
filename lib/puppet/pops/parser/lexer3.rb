@@ -172,23 +172,23 @@ class Lexer3
   KEYWORDS.each_pair {|k, v| KEYWORD_NAMES[v[0]] = k }
   KEYWORD_NAMES.freeze
 
-  HEX_DIGIT = []
-  LETTER = []
-  LETTER_OR_DIGIT = []
-  WORD = []
+  HEX_DIGIT = Array.new(0x80, false)
+  LETTER = Array.new(0x80, false)
+  LETTER_OR_DIGIT = Array.new(0x80, false)
+  WORD_CHAR = Array.new(0x80, false)
   WHITESPACE = [0x09, 0x0a, 0x0c, 0x20].freeze
 
-  (0x30..0x39).each { |n| WORD[n] = true; LETTER_OR_DIGIT[n] = true; HEX_DIGIT[n] = true }
-  (0x41..0x46).each { |n| WORD[n] = true; LETTER_OR_DIGIT[n] = true; LETTER[n] = true; HEX_DIGIT[n] = true }
-  (0x47..0x5a).each { |n| WORD[n] = true; LETTER_OR_DIGIT[n] = true; LETTER[n] = true }
-  (0x61..0x66).each { |n| WORD[n] = true; LETTER_OR_DIGIT[n] = true; LETTER[n] = true; HEX_DIGIT[n] = true }
-  (0x67..0x7a).each { |n| WORD[n] = true; LETTER_OR_DIGIT[n] = true; LETTER[n] = true }
-  WORD[0x5f] = true
+  (0x30..0x39).each { |n| WORD_CHAR[n] = true; LETTER_OR_DIGIT[n] = true; HEX_DIGIT[n] = true }
+  (0x41..0x46).each { |n| WORD_CHAR[n] = true; LETTER_OR_DIGIT[n] = true; LETTER[n] = true; HEX_DIGIT[n] = true }
+  (0x47..0x5a).each { |n| WORD_CHAR[n] = true; LETTER_OR_DIGIT[n] = true; LETTER[n] = true }
+  (0x61..0x66).each { |n| WORD_CHAR[n] = true; LETTER_OR_DIGIT[n] = true; LETTER[n] = true; HEX_DIGIT[n] = true }
+  (0x67..0x7a).each { |n| WORD_CHAR[n] = true; LETTER_OR_DIGIT[n] = true; LETTER[n] = true }
+  WORD_CHAR[0x5f] = true
 
   HEX_DIGIT.freeze
   LETTER.freeze
   LETTER_OR_DIGIT.freeze
-  WORD.freeze
+  WORD_CHAR.freeze
 
   # Invalid codepoint, used to denote end of stream. Saves checks for nil (nil does not respond to '<' '>')
   EOF = 0xffffffff
@@ -226,15 +226,14 @@ class Lexer3
   end
 
   def word_char?(c)
-    WORD[c]
+    WORD_CHAR[c]
   end
 
   attr_reader :locator
 
   def initialize()
     @token_queue = []
-    @selector = []
-    (0x00..0x7f).each { |c| @selector[c] = proc { |i,c| emit([:OTHER,  c.chr,  1], i) } }
+    @selector = Array.new(0x80, proc { |i,c| emit([:OTHER,  c.chr,  1], i) })
 
     # TOKEN '.'
     @selector[0x2e] = proc { |i| emit(TOKEN_DOT, i) }
@@ -536,7 +535,7 @@ class Lexer3
         loop do
           c = @codepoints[@next += 1] || EOF
           unless hex_digit?(c)
-            lex_error(Issues::INVALID_HEX_NUMBER, {:value => str}, i) if word_char?(c)
+            lex_error(Issues::INVALID_HEX_NUMBER, {:value => str}, i) if WORD_CHAR[c]
             break
           end
           str << c
@@ -622,7 +621,7 @@ class Lexer3
       str << c
     end
     str.freeze
-    emit([:CLASSREF, str, str.size], i)
+    emit([:CLASSREF, str, @next - i], i)
   end
 
   # PATTERN_DOLLAR_VAR     = %r{\$(::)?(\w+::)*\w+}.freeze
@@ -630,10 +629,8 @@ class Lexer3
     loop do
       c = @codepoints[@next]
       break if c.nil?
-      unless word_char?(c)
-        unless c == 0x3a # ':'
-          break
-        end
+      unless WORD_CHAR[c]
+        break unless c == 0x3a # ':'
 
         unless @codepoints[@next += 1] == 0x3a # '::'
           # only one colon is OK as next token
@@ -650,7 +647,7 @@ class Lexer3
       str << c
     end
     str.freeze
-    emit([:VARIABLE, str, str.size + 1], i)
+    emit([:VARIABLE, str, @next - i], i)
   end
 
   def emit_sqstring(i)
@@ -708,84 +705,19 @@ class Lexer3
 
   def emit_dqstring(i, first)
     str = ''
-    if first
-      len = 1
-    else
-      len = 0
-    end
     loop do
       c = @codepoints[@next]
       lex_error(Issues::UNCLOSED_QUOTE, { :after => "'\"'", :followed_by => '<eof>' }, i) unless c
 
-      len += 1
       @next += 1
       if c == 0x22
-        @token_queue << emit([first ? :STRING : :DQPOST, str.freeze, len], i)
+        @token_queue << emit([first ? :STRING : :DQPOST, str.freeze, @next - i], i)
         break
       end
-      if c == 0x5c # '\'
-        c = @codepoints[@next]
-        lex_error(Issues::UNCLOSED_QUOTE, { :after => "'\"'", :followed_by => '<eof>' }, i) unless c
-
-        len += 1
-        @next += 1
-        case c
-        when 0x5c, 0x24, 0x27 # '\\', '$', '"'
-          str << c
-        when 0x6e # 'n'
-          str << "\n"
-        when 0x72 # 'r'
-          str << "\r"
-        when 0x73 # ' '
-          str << ' '
-        when 0x74 # 't'
-          str << "\t"
-        when 0x75 # 'u', unicode escape
-          c = @codepoints[@next] || EOF
-          len += 1
-          if c == 0x7b # '{'
-            # 1-6 hex-digits
-            code = 0
-            loop do
-              c = @codepoints[@next += 1] || EOF
-              len += 1
-              break if c == 0x7d # '}'
-              lex_error(Issues::ILLEGAL_UNICODE_ESCAPE, i) unless hex_digit?(c)
-              code *= 0x10
-              code += hex_to_int(c)
-            end
-            str << [code].pack('U')
-          elsif hex_digit?(c)
-            # exactly 4 hex dgits
-            c2 = @codepoints[@next += 1] || EOF
-            c3 = @codepoints[@next += 1] || EOF
-            c4 = @codepoints[@next += 1] || EOF
-            len += 3
-            lex_error(Issues::ILLEGAL_UNICODE_ESCAPE, i) unless hex_digit?(c2) && hex_digit?(c3) && hex_digit?(c4)
-            str.concat(((hex_to_int(c) * 0x10 + hex_to_int(c2)) * 0x10 + hex_to_int(c3)) * 0x10 + hex_to_int(c4))
-          else
-            lex_error(Issues::ILLEGAL_UNICODE_ESCAPE, i)
-          end
-          @next += 1
-        else
-          str << c
-        end
-      elsif c == 0x24 # '$'
-        var_start = @next - 1
-        n = @codepoints[@next] || EOF
-        if n == 0x3a # ':'
-          lex_error(Issues::ILLEGAL_VARIABLE, i, :value => '$:') unless  @codepoints[@next += 1] == 0x3a
-          lex_error(Issues::ILLEGAL_VARIABLE, i, :value => '$::') unless word_char?(@codepoints[@next += 1] || EOF)
-          @token_queue << emit([first ? :DQPRE : :DQMID, str, len - 1], i)
-          @token_queue << emit_variable('::', var_start)
-          emit_dqstring(@next, false)
-          break
-        elsif word_char?(n)
-          @token_queue << emit([first ? :DQPRE : :DQMID, str, len - 1], i)
-          @token_queue << emit_variable('', var_start)
-          emit_dqstring(@next, false)
-          break
-        elsif n == 0x7b # '{'
+      if c == 0x24 # '$'
+        pre_len = @next - i - 1
+        n = @codepoints[@next]
+        if n == 0x7b # '{'
           # Nested expression, queue tokens until brace count is back to current
           @next += 1
           current_brace_count = @brace_count
@@ -821,16 +753,67 @@ class Lexer3
             new_queue[0] = transform_to_variable(new_queue[0]) if second == :DOT || second == :LBRACK
           end
 
-          queue << emit([first ? :DQPRE : :DQMID, str, len + 1], i)
+          queue << emit([first ? :DQPRE : :DQMID, str, pre_len + 2], i)
           queue.concat(new_queue)
           emit_dqstring(@next, false)
           break
-        else
-          str << c
+        elsif n == EOF
+          lex_error(Issues::UNCLOSED_QUOTE, { :after => "'\"'", :followed_by => '<eof>' }, i)
+        elsif word_char?(n)
+          @token_queue << emit([first ? :DQPRE : :DQMID, str, pre_len], i)
+          @token_queue << emit_variable('', pre_len)
+          emit_dqstring(@next, false)
+          break
+        elsif n == 0x3a # ':'
+          lex_error(Issues::ILLEGAL_VARIABLE, i, :value => '$:') unless  @codepoints[@next += 1] == 0x3a
+          lex_error(Issues::ILLEGAL_VARIABLE, i, :value => '$::') unless word_char?(@codepoints[@next += 1] || EOF)
+          @token_queue << emit([first ? :DQPRE : :DQMID, str, pre_len], i)
+          @token_queue << emit_variable('::', pre_len)
+          emit_dqstring(@next - 2, false)
+          break
         end
-      else
-        str << c
+      elsif c == 0x5c # '\'
+        c = @codepoints[@next]
+        lex_error(Issues::UNCLOSED_QUOTE, { :after => "'\"'", :followed_by => '<eof>' }, i) unless c
+
+        @next += 1
+        case c
+        when 0x5c, 0x24, 0x27 # '\\', '$', '"'
+        when 0x6e # 'n'
+          c = "\n"
+        when 0x72 # 'r'
+          c = "\r"
+        when 0x73 # ' '
+          c = ' '
+        when 0x74 # 't'
+          c = "\t"
+        when 0x75 # 'u', unicode escape
+          c = @codepoints[@next] || EOF
+          if c == 0x7b # '{'
+            # 1-6 hex-digits
+            code = 0
+            loop do
+              c = @codepoints[@next += 1] || EOF
+              break if c == 0x7d # '}'
+              lex_error(Issues::ILLEGAL_UNICODE_ESCAPE, i) unless hex_digit?(c)
+              code *= 0x10
+              code += hex_to_int(c)
+            end
+            c = code
+          elsif hex_digit?(c)
+            # exactly 4 hex dgits
+            c2 = @codepoints[@next += 1] || EOF
+            c3 = @codepoints[@next += 1] || EOF
+            c4 = @codepoints[@next += 1] || EOF
+            lex_error(Issues::ILLEGAL_UNICODE_ESCAPE, i) unless hex_digit?(c2) && hex_digit?(c3) && hex_digit?(c4)
+            c = ((hex_to_int(c) * 0x10 + hex_to_int(c2)) * 0x10 + hex_to_int(c3)) * 0x10 + hex_to_int(c4)
+          else
+            lex_error(Issues::ILLEGAL_UNICODE_ESCAPE, i)
+          end
+          @next += 1
+        end
       end
+      str << c
     end
     first ? @token_queue.shift : nil
   end
@@ -840,7 +823,7 @@ class Lexer3
   def emit_name(str, i, name)
     loop do
       c = @codepoints[@next] || EOF
-      unless word_char?(c)
+      unless WORD_CHAR[c]
         if c == 0x2d # '-'
           cnt = 1
           loop do
@@ -849,7 +832,7 @@ class Lexer3
             cnt += 1
           end
 
-          unless word_char?(c)
+          unless WORD_CHAR[c]
             cnt.times { @token_queue << TOKEN_MINUS }
             break
           end

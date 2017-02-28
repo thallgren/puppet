@@ -179,6 +179,7 @@ class Locator
       @file = file.freeze
       @prev_offset = nil
       @prev_line = nil
+      @line_index = line_index
     end
 
     # Returns the position on line (first position on a line is 1)

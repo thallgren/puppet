@@ -234,6 +234,10 @@ describe 'Lexer3' do
                       [:VARIABLE, 'x',   {:line => 1, :pos=>5, :length=>1 }],
                       [:DQPOST,   '',    {:line => 1, :pos=>7, :length=>1 }]],
 
+    '"a${xx}"'    => [[:DQPRE,    'a',   {:line => 1, :pos=>1, :length=>4 }],
+                      [:VARIABLE, 'xx',  {:line => 1, :pos=>5, :length=>2 }],
+                      [:DQPOST,   '',    {:line => 1, :pos=>8, :length=>1 }]],
+
     '"a${_x}"'    => [[:DQPRE,    'a',   {:line => 1, :pos=>1, :length=>4 }],
                       [:VARIABLE, '_x',  {:line => 1, :pos=>5, :length=>2 }],
                       [:DQPOST,   '',    {:line => 1, :pos=>8, :length=>1 }]],
