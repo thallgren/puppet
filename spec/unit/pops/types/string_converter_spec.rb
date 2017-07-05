@@ -87,6 +87,12 @@ describe 'The string converter' do
       end.to raise_error(/Only one of the delimiters/)
     end
 
+    it "Is an error to have trailing characters after the format" do
+      expect do
+        fmt = format.new("%dv")
+      end.to raise_error(/The format '%dv' is not a valid format/)
+    end
+
     it "Is an error to specify the same flag more than once" do
       expect do
         fmt = format.new("%[[d")
@@ -189,7 +195,7 @@ describe 'The string converter' do
 
     {
       [nil, '%.1p']  => 'u',
-      [nil, '%#.2p'] => '"u',
+      [nil, '%#.2p'] => "'u",
       [:default, '%.1p'] => 'd',
       [true, '%.2s'] => 'tr',
       [true, '%.2y'] => 'ye',
@@ -272,8 +278,8 @@ describe 'The string converter' do
       '%p'      => '18',
       '%4.2p'   => '  18',
       '%4.1p'   => '   1',
-      '%#s'     => '"18"',
-      '%#6.4s'  => '  "18"',
+      '%#s'     => "'18'",
+      '%#6.4s'  => "  '18'",
       '%#p'     => '18',
       '%#6.4p'  => '    18',
       '%d'      => '18',
@@ -319,7 +325,7 @@ describe 'The string converter' do
 
     it 'produces a quoted unicode char string by using format %#c' do
       string_formats = { Puppet::Pops::Types::PIntegerType::DEFAULT => '%#c'}
-      expect(converter.convert(0x1F603, string_formats)).to eq("\"\u{1F603}\"")
+      expect(converter.convert(0x1F603, string_formats)).to eq("'\u{1F603}'")
     end
 
     it 'errors when format is not recognized' do
@@ -337,9 +343,9 @@ describe 'The string converter' do
 
     {
       '%s'      => '18.0',
-      '%#s'     => '"18.0"',
+      '%#s'     => "'18.0'",
       '%5s'     => ' 18.0',
-      '%#8s'    => '  "18.0"',
+      '%#8s'    => "  '18.0'",
       '%05.1s'  => '    1',
       '%p'      => '18.0',
       '%7.2p'   => '     18',
@@ -415,9 +421,9 @@ describe 'The string converter' do
     { "%u"  => "undef",
       "%#u" => "undefined",
       "%s"  => "",
-      "%#s"  => '""',
+      "%#s"  => "''",
       "%p"  => 'undef',
-      "%#p"  => '"undef"',
+      "%#p"  => "'undef'",
       "%n"  => 'nil',
       "%#n" => 'null',
       "%v"  => 'n/a',
@@ -447,10 +453,10 @@ describe 'The string converter' do
       "%#-10u" => "undefined ",
       "%7.2u"  => "     un",
       "%4s"    => "    ",
-      "%#4s"   => '  ""',
+      "%#4s"   => "  ''",
       "%7p"    => '  undef',
       "%7.1p"  => '      u',
-      "%#8p"   => ' "undef"',
+      "%#8p"   => " 'undef'",
       "%5n"    => '  nil',
       "%.1n"   => 'n',
       "%-5n"   => 'nil  ',
@@ -520,8 +526,8 @@ describe 'The string converter' do
 
     { "%d"  => 'default',
       "%D"  => 'Default',
-      "%#d" => '"default"',
-      "%#D" => '"Default"',
+      "%#d" => "'default'",
+      "%#D" => "'Default'",
       "%s"  => 'default',
       "%p"  => 'default',
     }.each do |fmt, result |
@@ -549,7 +555,9 @@ describe 'The string converter' do
       "%T"   => 'True',
       "%#T"  => 'T',
       "%s"   => 'true',
+      "%#s"  => "'true'",
       "%p"   => 'true',
+      "%#p"  => "'true'",
       "%d"   => '1',
       "%x"   => '1',
       "%#x"  => '0x1',
@@ -667,10 +675,10 @@ describe 'The string converter' do
       long_array_t = factory.array_of(factory.integer, factory.range(3,100))
       string_formats = {
         short_array_t => "%(a",
-        long_array_t  => "%[a",
+        long_array_t  => "%{a",
       }
       expect(converter.convert([1, 2], string_formats)).to eq('(1, 2)')
-      expect(converter.convert([1, 2, 3], string_formats)).to eq('[1, 2, 3]')
+      expect(converter.convert([1, 2, 3], string_formats)).to eq('{1, 2, 3}')
     end
 
     it 'indents elements in alternate mode' do

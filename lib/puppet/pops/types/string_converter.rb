@@ -85,7 +85,8 @@ class StringConverter
 
     attr_reader :orig_fmt
 
-    FMT_PATTERN = /^%([\s\+\-#0\[\{<\(\|]*)([1-9][0-9]*)?(?:\.([0-9]+))?([a-zA-Z])/
+    FMT_PATTERN_STR = '^%([\s\[+#0{<(|-]*)([1-9][0-9]*)?(?:\.([0-9]+))?([a-zA-Z])$'
+    FMT_PATTERN = Regexp.compile(FMT_PATTERN_STR)
     DELIMITERS  = [ '[', '{', '(', '<', '|',]
     DELIMITER_MAP = {
       '[' => ['[', ']'],
@@ -233,7 +234,7 @@ class StringConverter
     end
 
     def to_s
-      "%#{@flags}#{@width}.#{@prec}#{@format}"
+      @orig_fmt
     end
   end
 
@@ -481,7 +482,7 @@ class StringConverter
   def convert(value, string_formats = :default)
     options = DEFAULT_STRING_FORMATS
 
-    value_type = TypeCalculator.infer_set(value)
+    value_type = TypeCalculator.infer(value)
     if string_formats.is_a?(String)
       # add the format given for the exact type
       string_formats = { value_type => string_formats }
@@ -541,7 +542,7 @@ class StringConverter
 
   def validate_container_input(fmt)
     if (fmt.keys - FMT_KEYS).size > 0
-      raise ArgumentError, "only #{FMT_KEYS}.map {|k| "'#{k}'"}.join(', ')} are allowed in a container format, got #{fmt}"
+      raise ArgumentError, "only #{FMT_KEYS.map {|k| "'#{k}'"}.join(', ')} are allowed in a container format, got #{fmt}"
     end
     result                          = Format.new(fmt['format'])
     result.separator                = fmt['separator']
@@ -608,9 +609,9 @@ class StringConverter
     f = get_format(val_type, format_map)
     apply_string_flags(f, case f.format
     when :d, :s, :p
-      f.alt? ? '"default"' : 'default'
+      f.alt? ? "'default'" : 'default'
     when :D
-      f.alt? ? '"Default"' : 'Default'
+      f.alt? ? "'Default'" : 'Default'
     else
       raise FormatError.new('Default', f.format, 'dDsp')
     end)
@@ -631,9 +632,9 @@ class StringConverter
     when :V
       'N/A'
     when :s
-      f.alt? ? '""' : ''
+      f.alt? ? "''" : ''
     when :p
-      f.alt? ? '"undef"' : 'undef'
+      f.alt? ? "'undef'" : 'undef'
     else
       raise FormatError.new('Undef', f.format, 'nudxXobBeEfgGaAvVsp')
     end)
@@ -667,19 +668,17 @@ class StringConverter
       # Boolean in numeric form, formated by integer rule
       numeric_bool = val ? 1 : 0
       string_formats = { Puppet::Pops::Types::PIntegerType::DEFAULT => f}
-      _convert(TypeCalculator.infer_set(numeric_bool), numeric_bool, string_formats, indentation)
+      _convert(TypeCalculator.infer(numeric_bool), numeric_bool, string_formats, indentation)
 
     when :e, :E, :f, :g, :G, :a, :A
       # Boolean in numeric form, formated by float rule
       numeric_bool = val ? 1.0 : 0.0
       string_formats = { Puppet::Pops::Types::PFloatType::DEFAULT => f}
-      _convert(TypeCalculator.infer_set(numeric_bool), numeric_bool, string_formats, indentation)
+      _convert(TypeCalculator.infer(numeric_bool), numeric_bool, string_formats, indentation)
 
-    when :s
-      apply_string_flags(f, val.to_s)
-
-    when :p
-      apply_string_flags(f, val.inspect)
+    when :s, :p
+      str_bool = val.to_s
+      apply_string_flags(f, f.alt? ? puppet_quote(str_bool) : str_bool)
 
     else
       raise FormatError.new('Boolean', f.format, 'tTyYdxXobBeEfgGaAsp')
@@ -713,13 +712,12 @@ class StringConverter
 
     when :c
       char = [val].pack("U")
-      char = f.alt? ? "\"#{char}\"" : char
-      char = Kernel.format(f.orig_fmt.gsub('c','s'), char)
+      char = f.alt? ? puppet_quote(char) : char
+      Kernel.format(f.orig_fmt.gsub('c','s'), char)
 
     when :s
-      fmt = f.alt? ? 'p' : 's'
       int_str = Kernel.format('%d', val)
-      Kernel.format(f.orig_fmt.gsub('s', fmt), int_str)
+      Kernel.format(f.orig_fmt, f.alt? ? puppet_quote(int_str) : int_str)
 
     else
       raise FormatError.new('Integer', f.format, 'dxXobBeEfgGaAspc')
@@ -737,7 +735,7 @@ class StringConverter
       Kernel.format(f.orig_fmt, val)
 
     when :s
-      float_str = f.alt? ? "\"#{Kernel.format('%p', val)}\"" : Kernel.format('%p', val)
+      float_str = f.alt? ? "'#{Kernel.format('%p', val)}'" : Kernel.format('%p', val)
       Kernel.format(f.orig_fmt, float_str)
 
     else
@@ -901,12 +899,10 @@ class StringConverter
     f = get_format(val_type, format_map)
     case f.format
     when :p
-      rx_s = val.options == 0 ? val.source : val.to_s
-      rx_s = rx_s.gsub(/\//, '\/') unless Gem::Version.new(RUBY_VERSION.dup) < Gem::Version.new('2.0.0')
-      str_regexp = "/#{rx_s}/"
+      str_regexp = PRegexpType.regexp_to_s_with_delimiters(val)
       f.orig_fmt == '%p' ? str_regexp : Kernel.format(f.orig_fmt.gsub('p', 's'), str_regexp)
     when :s
-      str_regexp = val.options == 0 ? val.source : val.to_s
+      str_regexp = PRegexpType.regexp_to_s(val)
       str_regexp = puppet_quote(str_regexp) if f.alt?
       f.orig_fmt == '%s' ? str_regexp : Kernel.format(f.orig_fmt, str_regexp)
     else
@@ -938,26 +934,27 @@ class StringConverter
         if children_indentation.first?
           children_indentation = children_indentation.subsequent
         end
-        val_t = TypeCalculator.infer_set(v)
+        val_t = TypeCalculator.infer(v)
         _convert(val_t, v, is_container?(val_t) ? format_map : string_formats, children_indentation)
       end
 
       # compute widest run in the array, skip nested arrays and hashes
       # then if size > width, set flag if a break on each element should be performed
+      sz_break = false
       if format.alt? && format.width
-        widest = val.each_with_index.reduce([0]) do | memo, v_i |
+        widest = 0
+        val.each_with_index do | v, i |
           # array or hash breaks
-          if is_a_or_h?(v_i[0])
-            memo << 0
+          if is_a_or_h?(v)
+            widest = 0
           else
-            memo[-1] += mapped[v_i[1]].length
+            widest += mapped[i].length
+            if(widest > format.width)
+              sz_break = true
+              break # no use continuing
+            end
           end
-          memo
         end
-        widest = widest.max
-        sz_break = widest > (format.width || Float::INFINITY)
-      else
-        sz_break = false
       end
 
       # output each element with breaks and padding
@@ -1012,7 +1009,7 @@ class StringConverter
   # @api private
   def string_PIteratorType(val_type, val, format_map, indentation)
     v = val.to_a
-    _convert(TypeCalculator.infer_set(v), v, format_map, indentation)
+    _convert(TypeCalculator.infer(v), v, format_map, indentation)
   end
 
   # @api private
@@ -1032,7 +1029,7 @@ class StringConverter
     when :a
       # Convert to array and use array rules
       array_hash = val.to_a
-      _convert(TypeCalculator.infer_set(array_hash), array_hash, format_map, indentation)
+      _convert(TypeCalculator.infer(array_hash), array_hash, format_map, indentation)
 
     when :h, :s, :p
       indentation = indentation.indenting(format.alt? || indentation.is_indenting?)
@@ -1050,8 +1047,8 @@ class StringConverter
       buf << delims[0]
       buf << cond_break  # break after opening delimiter if pretty printing
       buf << val.map do |k,v|
-        key_type = TypeCalculator.infer_set(k)
-        val_type = TypeCalculator.infer_set(v)
+        key_type = TypeCalculator.infer(k)
+        val_type = TypeCalculator.infer(v)
         key = _convert(key_type, k, is_container?(key_type) ? format_map : string_formats, children_indentation)
         val = _convert(val_type, v, is_container?(val_type) ? format_map : string_formats, children_indentation)
         "#{padding}#{key}#{assoc}#{val}"
@@ -1077,7 +1074,7 @@ class StringConverter
     f = get_format(val_type, format_map)
     case f.format
     when :s
-      str_val = f.alt? ? "\"#{val.to_s}\"" : val.to_s
+      str_val = f.alt? ? puppet_quote(val.to_s) : val.to_s
       Kernel.format(f.orig_fmt, str_val)
     when :p
       Kernel.format(f.orig_fmt.gsub('p', 's'), val.to_s)
