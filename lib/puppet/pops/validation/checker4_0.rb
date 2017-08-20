@@ -317,9 +317,13 @@ class Checker4_0 < Evaluator::LiteralEvaluator
     end
   end
 
-  def check_MethodCallExpression(o)
-    unless o.functor_expr.is_a? Model::QualifiedName
-      acceptor.accept(Issues::ILLEGAL_EXPRESSION, o.functor_expr, :feature => 'function name', :container => o)
+  def check_CallMethodExpression(o)
+    functor = o.functor_expr
+    case functor
+    when Model::NamedAccessExpression
+      # ok
+    else
+      acceptor.accept(Issues::ILLEGAL_EXPRESSION, o.functor_expr, :feature => 'method name', :container => o)
     end
   end
 
@@ -377,6 +381,16 @@ class Checker4_0 < Evaluator::LiteralEvaluator
     'regexp' => true,
     'pattern' => true,
     'runtime' => true,
+    'init' => true,
+    'object' => true,
+    'sensitive' => true,
+    'semver' => true,
+    'semverrange' => true,
+    'string' => true,
+    'timestamp' => true,
+    'timespan' => true,
+    'typeset' => true,
+
   }
 
   FUTURE_RESERVED_WORDS = {
