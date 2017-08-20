@@ -291,11 +291,11 @@ module Issues
   end
 
   ILLEGAL_SINGLE_TYPE_MAPPING = hard_issue :ILLEGAL_TYPE_MAPPING, :expression do
-    _("Illegal type mapping. Expected a Type on the left side, got %{expression}") % { expression: label.a_an_uc(semantic) }
+    _("Illegal type mapping. Expected a Type on the left side, got %{expression}") % { expression: label.a_an(semantic) }
   end
 
   ILLEGAL_REGEXP_TYPE_MAPPING = hard_issue :ILLEGAL_TYPE_MAPPING, :expression do
-    _("Illegal type mapping. Expected a Tuple[Regexp,String] on the left side, got %{expression}") % { expression: label.a_an_uc(semantic) }
+    _("Illegal type mapping. Expected a Tuple[Regexp,String] on the left side, got %{expression}") % { expression: label.a_an(semantic) }
   end
 
   ILLEGAL_PARAM_NAME = hard_issue :ILLEGAL_PARAM_NAME, :name do
