@@ -935,8 +935,8 @@ class Puppet::Parser::Scope
 
   # Execute given block with a ephemeral scope containing the given variables
   # @api private
-  def with_local_scope(scope_variables)
-    local = LocalScope.new(@ephemeral.last)
+  def with_local_scope(scope_variables, scope_class = LocalScope)
+    local = scope_class.new(@ephemeral.last)
     scope_variables.each_pair { |k, v| local[k] = v }
     @ephemeral.push(local)
     begin
