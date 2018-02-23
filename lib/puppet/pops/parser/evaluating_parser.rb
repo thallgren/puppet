@@ -7,8 +7,8 @@ class EvaluatingParser
 
   attr_reader :parser
 
-  def initialize()
-    @parser = Parser.new()
+  def initialize(options = EMPTY_HASH)
+    @parser = Parser.new(options)
   end
 
   def self.singleton
