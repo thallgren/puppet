@@ -3,9 +3,7 @@ type PSpec = TypeSet[{
 
   types => {
     Contain => {
-      attributes => {
-        match => Array[Variant[Get,String,Regexp]]
-      }
+      parent => Match
     },
     Epp_source => {
       parent => Source
@@ -37,7 +35,7 @@ type PSpec = TypeSet[{
     },
     Exclude => {
       attributes => {
-        matches => Array[Variant[Get,Issue,Match,Contain,String,Regexp]]
+        matches => Array[Variant[Issue,IssueCode,Match,Contain,String,Regexp]]
       }
     },
     Expectation => {
@@ -65,14 +63,14 @@ type PSpec = TypeSet[{
     },
     Include => {
       attributes => {
-        matches => Array[Variant[Get,Issue,Match,Contain,String,Regexp]]
+        matches => Array[Variant[Issue,IssueCode,Match,Contain,String,Regexp]]
       }
     },
     Input => {},
     Issue => {
       attributes => {
         code => IssueCode,
-        match => Variant[Get,Match,Contain,String,Regexp]
+        match => Hash[String[1], Variant[Match,Contain,String,Regexp]]
       }
     },
     IssueCode => {
@@ -82,7 +80,7 @@ type PSpec = TypeSet[{
     },
     Match => {
       attributes => {
-        match => Array[Variant[Get,String,Regexp]]
+        match => Array[Variant[String,Regexp]]
       }
     },
     Named_source => {
@@ -112,7 +110,7 @@ type PSpec = TypeSet[{
         pn_result => String
       }
     },
-    Parses_with => {
+    Validates_with => {
       parent => Result,
       attributes => {
         result => Array[Expectation]

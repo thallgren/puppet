@@ -37,7 +37,7 @@ module Puppet::PSpec
       cn = o.cased_value
       pn = @name_mappings[cn]
       return pn unless pn.nil?
-      Puppet::Pops::Issues.const_defined?(cn) ? IssueCode.new(cn) : super
+      cn =~ /^[A-Z][A-Z_]*$/ ? IssueCode.new(cn) : super
     end
   end
 end

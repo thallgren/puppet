@@ -1,0 +1,221 @@
+Examples('Integer',
+  Example('followed by letter',
+    Given('3g'),
+    Validates_with(Error(DIGIT_EXPECTED))
+  ),
+  Example('followed by non-ascii letter',
+    Given('3ö'),
+    Validates_with(Error(DIGIT_EXPECTED))
+  ),
+  Example('hex followed by non-hex letter',
+    Given('0x3g21'),
+    Validates_with(Error(HEXDIGIT_EXPECTED))
+  ),
+  Example('octal followed by non-octal digit',
+    Given('078'),
+    Validates_with(Error(OCTALDIGIT_EXPECTED))
+  )
+)
+
+
+Examples('Float',
+  Example('non digit after decimal point',
+    Given('123.a'),
+    Validates_with(Error(DIGIT_EXPECTED))
+  ),
+  Example('non digit after fraction',
+    Given('123.4a'),
+    Validates_with(Error(DIGIT_EXPECTED))
+  ),
+  Example('non digit after exponent',
+    Given('123.45ex'),
+    Validates_with(Error(DIGIT_EXPECTED))
+  ),
+  Example('non digit after exponent digit',
+    Given('123.45e3x'),
+    Validates_with(Error(DIGIT_EXPECTED))
+  ),
+  Example('non digit after exponent sign',
+    Given('123.45e-x'),
+    Validates_with(Error(DIGIT_EXPECTED))
+  )
+)
+
+Examples('Qualified Name',
+  Example('all segments must start with a lower letter',
+    Given('av::bv::Cv'), Validates_with(Error(INVALID_NAME))),
+)
+
+Examples('Qualified Reference',
+  Example('all segments must start with an uppercase letter',
+    Given('Av::Bv::cv'), Validates_with(Error(INVALID_TYPE_NAME))),
+)
+
+Examples('Variable Name',
+  Example('segments cannot start with an upper case letter',
+    Given('$av::bv::Cv'), Validates_with(Error(INVALID_VARIABLE_NAME))),
+  Example('only last segment cannot start with an underscore',
+    Given('$av::_v::cv'), Validates_with(Error(INVALID_VARIABLE_NAME))),
+)
+
+Examples('Operator precedence',
+  Example('14',
+    Given('$x = +b'),
+    Validates_with(Error(UNEXPECTED_TOKEN))),
+)
+
+Examples('Single Quoted String',
+  Example('can not contain line breaks',
+    Given(Source(`'the \tstring
+  \t'`)),
+    Validates_with(Error(UNTERMINATED_STRING))
+  )
+)
+
+Examples('Double Quoted String',
+  Example('rejects malformed variable names',
+    Given(`"$Var"`),
+    Validates_with(Error(MALFORMED_INTERPOLATION))
+  ),
+  Example('reports unterminated strings',
+    Given(`"y`),
+    Validates_with(Error(UNTERMINATED_STRING))
+  ),
+  Example('reports unterminated interpolations',
+    Given(`"y${var"`),
+    Validates_with(Error(UNTERMINATED_STRING))
+  ),
+)
+
+Examples('Heredoc String',
+  Example('empty tag is an error',
+    Given(@(SRC)),
+      @()
+      This is
+      heredoc $text
+      |- END
+      |SRC
+    Validates_with(Error(HEREDOC_EMPTY_TAG))
+  ),
+  Example('reports unterminated heredoc tag declaration',
+    Given(@(SRC)),
+      @(END
+      /t)
+      This\nis\nheredoc\ntext
+      -END
+      |SRC
+    Validates_with(Error(HEREDOC_DECL_UNTERMINATED))
+  ),
+  Example('reports unterminated heredoc',
+    Given(@(SRC)),
+      @(END)
+      This is
+      heredoc text
+      |SRC
+    Validates_with(Error(HEREDOC_UNTERMINATED))
+  ),
+   Example('does not allow multiple syntax declarations',
+    Given(@(SRC)),
+      @(END:json:yaml)
+      This is
+      heredoc text
+      END
+      |SRC
+    Validates_with(Error(HEREDOC_MULTIPLE_SYNTAX))
+  ),
+  Example('reports unterminated \u{...',
+    Given(@("SRC")),
+      @(END/u)
+      A hat \\u{1f452 symbol
+      -END
+      |SRC
+    Validates_with(Error(MALFORMED_UNICODE_ESCAPE))
+  ),
+  Example('reports \u{xxx} with more than 6 digits',
+    Given(@("SRC")),
+      @(END/u)
+      A hat \\u{1f45234} symbol
+      -END
+      |SRC
+    Validates_with(Error(MALFORMED_UNICODE_ESCAPE))
+  ),
+  Example('reports \u{xxx} with less than 2 digits',
+    Given(@("SRC")),
+      @(END/u)
+      A hat \\u{1} symbol
+      -END
+      |SRC
+    Validates_with(Error(MALFORMED_UNICODE_ESCAPE))
+  ),
+  Example('reports \uXXXX unless it has 4 digits',
+    Given(@("SRC")),
+      @(END/u)
+      A hat \u271 symbol
+      -END
+      |SRC
+    Validates_with(Error(MALFORMED_UNICODE_ESCAPE))
+  ),
+  Example('reports \uXXXX unless all four X are hexadecimal numbers',
+    Given(@("SRC")),
+      @(END/u)
+      A hat \\ux271 symbol
+      -END
+      |SRC
+    Validates_with(Error(MALFORMED_UNICODE_ESCAPE))
+  ),
+  Example('does not allow multiple flag declarations',
+    Given(@(SRC)),
+      @(END/t/s)
+      This is
+      heredoc text
+      END
+      |SRC
+    Validates_with(Error(HEREDOC_MULTIPLE_ESCAPE))
+  ),
+  Example('does not allow multiple invalid flag declarations',
+    Given(@(SRC)),
+      @(END/k)
+      This is
+      heredoc text
+      END
+      |SRC
+    Validates_with(Error(HEREDOC_ILLEGAL_ESCAPE))
+  ),
+  Example('multiple quoted tags are not allowed inside of declaration',
+    Given(@(SRC)),
+      @("END""MORE")
+      This is
+      heredoc $text
+      |- END
+      |SRC
+    Validates_with(Error(HEREDOC_MULTIPLE_TAG))
+  ),
+  Example('missing end quote on tag is an error',
+    Given(@(SRC)),
+      @("END)
+      This is
+      heredoc $text
+      |- END
+      |SRC
+    Validates_with(Error(HEREDOC_DECL_UNTERMINATED))
+  ),
+  Example('tags end quote on next line is an error',
+    Given(@(SRC)),
+      @("END
+      ")
+      This is
+      heredoc $text
+      |- END
+      |SRC
+    Validates_with(Error(HEREDOC_DECL_UNTERMINATED))
+  ),
+  Example('empty quoted tag is an error',
+    Given(@(SRC)),
+      @("")
+      This is
+      heredoc $text
+      |- END
+      |SRC
+    Validates_with(Error(HEREDOC_EMPTY_TAG))
+  ),
+)

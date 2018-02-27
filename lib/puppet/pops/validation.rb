@@ -224,6 +224,7 @@ module Validation
   class Diagnostic
     attr_reader :severity
     attr_reader :issue
+    # @return [Hash{Symbol=>Object}] arguments for the Issue
     attr_reader :arguments
     attr_reader :exception
     attr_reader :file
