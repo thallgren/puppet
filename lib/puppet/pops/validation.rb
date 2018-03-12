@@ -224,6 +224,7 @@ module Validation
   class Diagnostic
     attr_reader :severity
     attr_reader :issue
+    # @return [Hash{Symbol=>Object}] arguments for the Issue
     attr_reader :arguments
     attr_reader :exception
     attr_reader :file
@@ -250,6 +251,10 @@ module Validation
         severity            == o.severity
     end
     alias eql? ==
+
+    def issue_code
+      issue.issue_code
+    end
 
     # Position is equal if the diagnostic is not located or if referring to the same offset
     def same_position?(o)
